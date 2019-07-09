@@ -3,6 +3,7 @@ import java.util.concurrent.locks.*;
 
 class Clerk extends Thread {
     private static String[] boxes;
+    private static ArrayList<Integer> busyBoxes;
     private static final Lock lock = new ReentrantLock();
 
     Clerk() {
@@ -11,6 +12,7 @@ class Clerk extends Thread {
         {
             boxes[i] = "";
         }
+        busyBoxes = new ArrayList<>();
     }
 
     //gets bags from the pilgrim and puts them in boxes if there is space available.
@@ -18,9 +20,11 @@ class Clerk extends Thread {
         if (getNewBagsIndex(name) == -1) { //if there is no bags with this name
             lock.lock();
             int index = bestFitIndex(number);
-            if (index != -1) {
+            if (index != -1 && !isBoxBusy(index, number)) {
+                setBusyBoxes(index, number);
                 lock.unlock();
                 addBags(name, number, index);
+                removeBusyBoxes(index, number);
                 return true;
             }
             else {
@@ -30,15 +34,21 @@ class Clerk extends Thread {
             }
         }
         else { //if there is bags with this name
+            int index = getNewBagsIndex(name);
             lock.lock();
-            if (EnoughBoxesInPlace(number, getNewBagsIndex(name))) { // if there is enough empty boxes after the boxes with this name
+            if (enoughBoxesInPlace(number, index)) { // if there is enough empty boxes after the boxes with this name
+                setBusyBoxes(index, number);
                 lock.unlock();
                 addBags(name, number, getNewBagsIndex(name));
+                removeBusyBoxes(index, number);
                 return true;
             } else if (enoughBoxesInShrine(number)) { // if we have enough empty boxes in the shrine
                 reArrange(name);
+                index = getNewBagsIndex(name);
+                setBusyBoxes(index, number);
                 lock.unlock();
                 addBags(name, number, getNewBagsIndex(name));
+                removeBusyBoxes(index, number);
                 return true;
             } else {
                 System.out.println("problem: not enough space. please wait!");
@@ -58,7 +68,6 @@ class Clerk extends Thread {
         }
         lock.unlock();
     }
-
     // rearranges the boxes so we can put new bags for this guy. ( defragmentation )
     private void reArrange(String name) {
         ArrayList<String> nameList = new ArrayList<>();
@@ -108,7 +117,7 @@ class Clerk extends Thread {
     }
 
     //check if there is enough boxes after the given index
-    private boolean EnoughBoxesInPlace(int n, int index) {
+    private boolean enoughBoxesInPlace(int n, int index) {
         for (int i = index; i < index + n; i++) {
             if (i >= boxes.length || boxes[i] != "")
                 return false;
@@ -169,6 +178,35 @@ class Clerk extends Thread {
             }
         }
 
+    }
+
+    //sets boxes that are gonna be busy while bags are being added to them
+    private void setBusyBoxes(int startIndex, int n) {
+        for (int i = startIndex; i < startIndex + n; i++) {
+            busyBoxes.add(i);
+        }
+        System.out.println("busy boxes: " + busyBoxes);
+    }
+
+    // removes from the busy boxes array because the boxes are no longer busy
+    private void removeBusyBoxes(int startIndex, int n) {
+        lock.lock();
+        for (int i = startIndex; i < startIndex + n; i++) {
+            if (i >= boxes.length)
+                break;
+            if (!busyBoxes.contains(i))
+                continue;
+            busyBoxes.remove(busyBoxes.indexOf(i));
+        }
+        lock.unlock();
+    }
+
+    private boolean isBoxBusy(int startIndex, int n) {
+        for (int i = startIndex; i < startIndex + n; i++) {
+            if (busyBoxes.contains(i))
+                return true;
+        }
+        return false;
     }
 
     //prints the current status of boxes
